@@ -1,4 +1,4 @@
-[[
+--[[
 	MEMESENSE GUI BY SHITARO
 	ФУЛЛ 1 В 1 ГУИ ИЗ МЕМИКА НА КС2, ЛУЧШЕ ТУПОЙ ХУЙНИ ЮГЕЙМА!
 	Я - shitaro.lol
