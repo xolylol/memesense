@@ -488,6 +488,7 @@ local lib = {
 	fnt = fnt,
 	ico = ico,
 	ver = "1.0.0",
+	BuildVersion = "1.0.1",
 }
 
 local st = {
