@@ -8,7 +8,14 @@
 
 
 local function svc(n)
-	return cloneref(game:GetService(n))
+	local g = game:GetService(n)
+	if cloneref then
+		local ok, r = pcall(cloneref, g)
+		if ok and r then
+			return r
+		end
+	end
+	return g
 end
 
 local plrs = svc("Players")
@@ -37,8 +44,51 @@ local iend = Enum.UserInputState.End
 local kunk = Enum.KeyCode.Unknown
 local white, black = c3(1, 1, 1), c3(0, 0, 0)
 
-local genv = getgenv()
-local b64e, b64d = base64encode, base64decode
+local genv = (getgenv and getgenv()) or _G
+local b64e, b64d
+do
+	local cr = rawget(_G, "crypt") or (getgenv and getgenv().crypt)
+	local e = base64encode or base64_encode or (type(cr) == "table" and (cr.base64encode or (cr.base64 and cr.base64.encode)))
+	local d = base64decode or base64_decode or (type(cr) == "table" and (cr.base64decode or (cr.base64 and cr.base64.decode)))
+	local A = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+	if type(e) ~= "function" then
+		e = function(str)
+			local out = {}
+			for i = 1, #str, 3 do
+				local a, b, c = string.byte(str, i, i + 2)
+				local n = a * 65536 + (b or 0) * 256 + (c or 0)
+				local c1, c2, c3, c4 = math.floor(n / 262144) % 64, math.floor(n / 4096) % 64, math.floor(n / 64) % 64, n % 64
+				out[#out + 1] = string.sub(A, c1 + 1, c1 + 1) .. string.sub(A, c2 + 1, c2 + 1)
+					.. (b and string.sub(A, c3 + 1, c3 + 1) or "=") .. (c and string.sub(A, c4 + 1, c4 + 1) or "=")
+			end
+			return table.concat(out)
+		end
+	end
+	if type(d) ~= "function" then
+		local rev = {}
+		for i = 1, 64 do
+			rev[string.byte(A, i)] = i - 1
+		end
+		d = function(str)
+			str = string.gsub(str, "[^%w%+/=]", "")
+			local out = {}
+			for i = 1, #str, 4 do
+				local a, b, c, dd = string.byte(str, i, i + 3)
+				local n = (rev[a] or 0) * 262144 + (rev[b] or 0) * 4096 + (rev[c] or 0) * 64 + (rev[dd] or 0)
+				local o = string.char(math.floor(n / 65536) % 256)
+				if c ~= 61 then
+					o = o .. string.char(math.floor(n / 256) % 256)
+				end
+				if dd ~= 61 then
+					o = o .. string.char(n % 256)
+				end
+				out[#out + 1] = o
+			end
+			return table.concat(out)
+		end
+	end
+	b64e, b64d = e, d
+end
 
 local maid = {}
 maid.__index = maid
@@ -4047,7 +4097,7 @@ local function cfgrow(sf, it, i)
 	con(hit.MouseButton2Click, function()
 		local d = fs.read(cpath(n))
 		if d then
-			setclipboard(b64e(d))
+			pcall(setclipboard or toclipboard or function() end, b64e(d))
 			lib:notify("Share code copied")
 		end
 	end)
@@ -4593,7 +4643,25 @@ function lib:window(o)
 	if protect_gui then
 		protect_gui(gui)
 	end
-	gui.Parent = gethui()
+	local host
+	if gethui then
+		local ok, r = pcall(gethui)
+		host = ok and r or nil
+	end
+	if not host then
+		local ok, r = pcall(svc, "CoreGui")
+		if ok and r then
+			local t = Instance.new("Folder")
+			local ok2 = pcall(function()
+				t.Parent = r
+			end)
+			t:Destroy()
+			if ok2 then
+				host = r
+			end
+		end
+	end
+	gui.Parent = host or lp:WaitForChild("PlayerGui")
 	st.mob = mobile(o, pf)
 	rescale()
 	st.open = false
