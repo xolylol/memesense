@@ -488,7 +488,7 @@ local lib = {
 	fnt = fnt,
 	ico = ico,
 	ver = "1.0.0",
-	BuildVersion = "1.1.0",
+	BuildVersion = "1.2.0",
 }
 
 local st = {
@@ -528,6 +528,7 @@ end
 
 local hud = { on = true, size = 16, gap = 2, stroke = true }
 local wm = { on = false, show = { "Name", "FPS", "Ping", "Time" }, text = "" }
+local kl = { on = true, mode = true, rows = {} }
 
 local hudupd, ctxopen, newcont, prefsave
 
@@ -3003,6 +3004,123 @@ function lib:resetwatermark()
 	end
 end
 
+-- keybind list: only binds that are active right now
+function kl.entries()
+	local out = {}
+	local els = lib.els
+	for i = 1, #els do
+		local e = els[i]
+		local b = e.bnd
+		if b and b.key and not e.dead and not e.dis then
+			local on
+			if e.kind == "tgl" and b.mode ~= "hold" then
+				on = e.val == true
+			else
+				on = b.act == true
+			end
+			if on then
+				out[#out + 1] = e
+			end
+		end
+	end
+	return out
+end
+
+function kl.name(e)
+	local o = e.o or {}
+	if o.listname then
+		return o.listname
+	end
+	local ind = e.ind
+	if ind and ind.name ~= "" then
+		return ind.name
+	end
+	return e.name
+end
+
+function kl.row(e)
+	local lo = tonumber(e.id) or 0
+	local n = mk("TextLabel", {
+		Size = ofs(0, 22),
+		AutomaticSize = aix,
+		TextSize = 15,
+		TextTransparency = 1,
+		LayoutOrder = lo,
+		Text = kl.name(e),
+		Parent = kl.nc,
+	}, { TextColor3 = "txt" })
+	local m = mk("TextLabel", {
+		Size = ofs(0, 22),
+		AutomaticSize = aix,
+		TextSize = 15,
+		TextTransparency = 1,
+		LayoutOrder = lo,
+		Parent = kl.mc,
+	}, { TextColor3 = "dim" })
+	tw(n, { TextTransparency = 0 }, 0.12)
+	tw(m, { TextTransparency = 0 }, 0.12)
+	return { n = n, m = m }
+end
+
+function kl.kill(r)
+	tw(r.n, { TextTransparency = 1 }, 0.12)
+	tw(r.m, { TextTransparency = 1 }, 0.12)
+	delay(0.14, function()
+		r.n:Destroy()
+		r.m:Destroy()
+	end)
+end
+
+function kl.upd()
+	local f = kl.f
+	if not f then
+		return
+	end
+	local want = {}
+	if kl.on then
+		local es = kl.entries()
+		for i = 1, #es do
+			want[es[i]] = true
+		end
+	end
+	for e, r in next, kl.rows do
+		if not want[e] then
+			kl.rows[e] = nil
+			kl.kill(r)
+		end
+	end
+	for e in next, want do
+		local r = kl.rows[e]
+		if not r then
+			r = kl.row(e)
+			kl.rows[e] = r
+		end
+		local t = e.bnd.mode == "hold" and "Hold" or "Toggle"
+		if r.m.Text ~= t then
+			r.m.Text = t
+		end
+	end
+	kl.mc.Visible = kl.mode
+	f.Visible = kl.on and (next(kl.rows) ~= nil or st.open)
+end
+
+function lib:setkeybindlist(o)
+	o = o or {}
+	if o.on ~= nil then
+		kl.on = o.on == true
+	end
+	if o.mode ~= nil then
+		kl.mode = o.mode == true
+	end
+	kl.upd()
+end
+
+function lib:resetkeybindlist()
+	if kl.f and kl.def then
+		kl.f.Position = kl.def
+	end
+end
+
 function lib:notify(s, t)
 	local lf = st.logs
 	if not lf or st.dead then
@@ -4057,6 +4175,10 @@ function lib:toggle(v)
 	if wm.hh then
 		wm.hh.Visible = v
 	end
+	if kl.hh then
+		kl.hh.Visible = v
+	end
+	kl.upd()
 	if not v then
 		closeall(true)
 		stopdrag()
@@ -4328,8 +4450,7 @@ function tabcls:configs(o)
 	return self
 end
 
-function tabcls:hud(o)
-	o = o or {}
+function tabcls:hud()
 	local s = self:section({ name = "Indicators" })
 	s:toggle({
 		name = "Enable",
@@ -4380,9 +4501,6 @@ function tabcls:hud(o)
 			end
 		end,
 	})
-	if o.watermark == false then
-		return self
-	end
 	local w = self:section({ name = "Watermark", side = 2 })
 	w:toggle({
 		name = "Enable",
@@ -4425,6 +4543,34 @@ function tabcls:hud(o)
 	wm.show = lib.flags.wm_show or wm.show
 	wm.text = lib.flags.wm_text or ""
 	wmstyle()
+	local k = self:section({ name = "Keybinds", side = 2 })
+	k:toggle({
+		name = "Enable",
+		flag = "kl_on",
+		default = true,
+		cb = function(v)
+			kl.on = v
+			kl.upd()
+		end,
+	})
+	k:toggle({
+		name = "Show mode",
+		flag = "kl_mode",
+		default = true,
+		cb = function(v)
+			kl.mode = v
+			kl.upd()
+		end,
+	})
+	k:button({
+		name = "Reset position",
+		cb = function()
+			lib:resetkeybindlist()
+		end,
+	})
+	kl.on = lib.flags.kl_on ~= false
+	kl.mode = lib.flags.kl_mode ~= false
+	kl.upd()
 	return self
 end
 
@@ -4610,6 +4756,67 @@ local function mobile(o, pf)
 	return b
 end
 
+function kl.build(ins, isopen)
+	local def = ud2(1, -14, 0, ins.Y + 51)
+	kl.def = def
+	local f = mk("Frame", {
+		AnchorPoint = v2(1, 0),
+		Position = def,
+		Size = ofs(150, 30),
+		Visible = false,
+		Parent = st.gui,
+	}, { BackgroundColor3 = "bg" })
+	mk("UIStroke", { Thickness = 1, Parent = f }, { Color = "edge" })
+	gradline(f, 2, st.gspd)
+	local body = mk("Frame", {
+		BackgroundTransparency = 1,
+		Position = ofs(0, 3),
+		Size = ofs(0, 0),
+		AutomaticSize = aixy,
+		Parent = f,
+	})
+	pad(body, 11, 11, 3, 8)
+	vlist(body, 2)
+	mk("TextLabel", {
+		Size = ofs(0, 22),
+		AutomaticSize = aix,
+		FontFace = fnt.b,
+		TextSize = 15,
+		LayoutOrder = 1,
+		Text = "Keybinds",
+		Parent = body,
+	}, { TextColor3 = "txt" })
+	local cols = mk("Frame", {
+		BackgroundTransparency = 1,
+		Size = ofs(0, 0),
+		AutomaticSize = aixy,
+		LayoutOrder = 2,
+		Parent = body,
+	})
+	hlist(cols, 16)
+	kl.nc = mk("Frame", { BackgroundTransparency = 1, Size = ofs(0, 0), AutomaticSize = aixy, LayoutOrder = 1, Parent = cols })
+	vlist(kl.nc, 0)
+	kl.mc = mk("Frame", { BackgroundTransparency = 1, Size = ofs(0, 0), AutomaticSize = aixy, LayoutOrder = 2, Parent = cols })
+	vlist(kl.mc, 0)
+	kl.f = f
+	con(body:GetPropertyChangedSignal("AbsoluteSize"), function()
+		local sz = body.AbsoluteSize
+		if sz.X > 0 then
+			f.Size = ofs(max(150, sz.X), sz.Y + 3)
+		end
+	end)
+	kl.hh = mk("TextButton", { Size = scl(1, 1), ZIndex = 8, Visible = false, Parent = f })
+	dragger(kl.hh, f, isopen)
+	local ka = 0
+	st.md:add(rs.Heartbeat:Connect(function(dt)
+		ka += dt
+		if ka >= 0.05 then
+			ka = 0
+			kl.upd()
+		end
+	end))
+end
+
 function lib:window(o)
 	o = o or {}
 	local old = genv.memesense_lib
@@ -4728,6 +4935,7 @@ function lib:window(o)
 		end
 	end))
 	wmstyle()
+	kl.build(ins, isopen)
 	st.logs = mk("Frame", { BackgroundTransparency = 1, Position = ofs(12, ins.Y + 8), Size = ofs(0, 0), AutomaticSize = aixy, Parent = gui })
 	vlist(st.logs, 2)
 	st.md:add(uis.InputBegan:Connect(onbegan))
@@ -4810,6 +5018,8 @@ function lib:unload()
 	st.gui, st.root, st.pl, st.win, st.logs, st.us, st.logo, st.mk, st.probe, st.cv, st.mob, st.mobp, st.modal = nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil
 	hud.f, hud.hf, hud.hh, hud.ll = nil, nil, nil, nil
 	wm.f, wm.l, wm.hh, wm.parts = nil, nil, nil, nil
+	kl.f, kl.hh, kl.nc, kl.mc = nil, nil, nil, nil
+	kl.rows = {}
 	mus.t = nil
 	cfgref = function() end
 	if genv.memesense_lib == self then
