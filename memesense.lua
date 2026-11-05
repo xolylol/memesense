@@ -527,7 +527,7 @@ local function isptr(t)
 end
 
 local wm = { on = false, show = { "Name", "FPS", "Ping", "Time" }, text = "" }
-local kl = { on = true, mode = true, rows = {}, w = 170, max = 5 }
+local kl = { on = true, mode = true, rows = {}, w = 170, max = 10, h = 36 }
 
 local ctxopen, newcont, prefsave
 
@@ -2951,7 +2951,17 @@ function kl.upd()
 		end
 	end
 	kl.mc.Visible = kl.mode
-	local show = kl.on and (next(kl.rows) ~= nil or st.open) or false
+	local n = 0
+	for _ in next, kl.rows do
+		n += 1
+	end
+	n = min(n, kl.max)
+	local h = n > 0 and 38 + n * 22 or 36
+	if h ~= kl.h then
+		kl.h = h
+		tw(f, { Size = ofs(kl.w, h) }, 0.2)
+	end
+	local show = kl.on and (n > 0 or st.open) or false
 	if show ~= kl.vis then
 		kl.vis = show
 		if kl.parts then
@@ -4542,18 +4552,19 @@ end
 function kl.build(ins, isopen)
 	local def = ud2(1, -14, 0, ins.Y + 51)
 	kl.def = def
-	local w, h = kl.w, 38 + kl.max * 22
+	local w = kl.w
+	kl.h = 36
 	local f = mk("Frame", {
 		AnchorPoint = v2(1, 0),
 		Position = def,
-		Size = ofs(w, h),
+		Size = ofs(w, kl.h),
 		ClipsDescendants = true,
 		Visible = false,
 		Parent = st.gui,
 	}, { BackgroundColor3 = "bg" })
 	mk("UIStroke", { Thickness = 1, Parent = f }, { Color = "edge" })
 	gradline(f, 2, st.gspd)
-	local body = mk("Frame", { BackgroundTransparency = 1, Position = ofs(0, 3), Size = ofs(w, h - 3), Parent = f })
+	local body = mk("Frame", { BackgroundTransparency = 1, Position = ofs(0, 3), Size = ofs(w, 35 + kl.max * 22), Parent = f })
 	pad(body, 11, 11, 3, 8)
 	vlist(body, 2)
 	kl.title = mk("TextLabel", {
@@ -4783,6 +4794,7 @@ function lib:unload()
 	st.gui, st.root, st.pl, st.win, st.logs, st.us, st.logo, st.mk, st.probe, st.cv, st.mob, st.mobp, st.modal = nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil
 	wm.f, wm.l, wm.hh, wm.parts = nil, nil, nil, nil
 	kl.f, kl.hh, kl.nc, kl.mc, kl.title, kl.parts, kl.vis = nil, nil, nil, nil, nil, nil, nil
+	kl.h = 36
 	kl.rows = {}
 	mus.t = nil
 	cfgref = function() end
