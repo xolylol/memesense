@@ -488,7 +488,7 @@ local lib = {
 	fnt = fnt,
 	ico = ico,
 	ver = "1.0.0",
-	BuildVersion = "1.0.1",
+	BuildVersion = "1.1.0",
 }
 
 local st = {
@@ -2979,6 +2979,30 @@ local function wmstyle()
 	pfade(f, wm.parts, wm.on)
 end
 
+function lib:setwatermark(o)
+	o = o or {}
+	if o.on ~= nil then
+		wm.on = o.on == true
+	end
+	if type(o.show) == "table" then
+		wm.show = o.show
+	end
+	if o.text ~= nil then
+		wm.text = tostring(o.text)
+	end
+	wmstyle()
+end
+
+function lib:getwatermark()
+	return { on = wm.on, show = wm.show, text = wm.text }
+end
+
+function lib:resetwatermark()
+	if wm.f and wm.def then
+		wm.f.Position = wm.def
+	end
+end
+
 function lib:notify(s, t)
 	local lf = st.logs
 	if not lf or st.dead then
@@ -3809,6 +3833,37 @@ function lib:settheme(k, c)
 	redrawall()
 end
 
+function lib:applytheme(t)
+	if type(t) ~= "table" then
+		return
+	end
+	local changed = {}
+	for k, c in pairs(t) do
+		if thm[k] ~= nil and typeof(c) == "Color3" then
+			thm[k] = c
+			changed[k] = true
+		end
+	end
+	local g = st.gui
+	if g then
+		local ds = g:GetDescendants()
+		for i = 1, #ds do
+			local o = ds[i]
+			for j = 1, #tha do
+				local k = o:GetAttribute(tha[j])
+				if k and changed[k] then
+					o[thp[j]] = thm[k]
+				end
+			end
+		end
+	end
+	local pk = lib.fl.ms_bg
+	if pk and changed.bg then
+		pk:set(thm.bg, nil, true)
+	end
+	redrawall()
+end
+
 local mus = { key = "MemeSense", rk = hs:GenerateGUID(false) }
 local mdef = Enum.MouseBehavior.Default
 
@@ -3920,8 +3975,15 @@ local function rescale()
 	end
 	local f = lib.flags
 	local s
-	if f.ms_fscale and type(f.ms_scale) == "number" then
-		s = f.ms_scale
+	local fc, fv = f.ms_fscale, f.ms_scale
+	if fc == nil then
+		fc = lib.scaleforce
+	end
+	if fv == nil then
+		fv = lib.scaleval
+	end
+	if fc and type(fv) == "number" then
+		s = fv
 	else
 		local sz = g.AbsoluteSize
 		if sz.Y <= 0 then
@@ -3939,6 +4001,43 @@ local function rescale()
 			ps[i]:clampit()
 		end
 	end)
+end
+
+function lib:setscale(s)
+	local force = type(s) == "number"
+	if force then
+		s = clamp(s, 0.5, 1.5)
+		lib.scaleval = s
+	end
+	lib.scaleforce = force
+	local fl = lib.fl
+	if fl.ms_fscale then
+		fl.ms_fscale:set(force, true)
+	end
+	if force and fl.ms_scale then
+		fl.ms_scale:set(s, true)
+	end
+	rescale()
+	prefsave()
+end
+
+function lib:getscale()
+	local us = st.us
+	return us and us.Scale or 1
+end
+
+function lib:setmobilebtn(v)
+	local b = st.mob
+	if not b then
+		return
+	end
+	v = v == true
+	local e = lib.fl.ms_mbtn
+	if e then
+		e:set(v)
+	elseif b.Visible ~= v then
+		pfade(b, st.mobp, v)
+	end
 end
 
 function lib:toggle(v)
@@ -4229,7 +4328,8 @@ function tabcls:configs(o)
 	return self
 end
 
-function tabcls:hud()
+function tabcls:hud(o)
+	o = o or {}
 	local s = self:section({ name = "Indicators" })
 	s:toggle({
 		name = "Enable",
@@ -4280,6 +4380,9 @@ function tabcls:hud()
 			end
 		end,
 	})
+	if o.watermark == false then
+		return self
+	end
 	local w = self:section({ name = "Watermark", side = 2 })
 	w:toggle({
 		name = "Enable",
