@@ -526,11 +526,10 @@ local function isptr(t)
 	return t == mb1 or t == tch
 end
 
-local hud = { on = true, size = 16, gap = 2, stroke = true }
 local wm = { on = false, show = { "Name", "FPS", "Ping", "Time" }, text = "" }
-local kl = { on = true, mode = true, rows = {} }
+local kl = { on = true, mode = true, rows = {}, w = 170, max = 5 }
 
-local hudupd, ctxopen, newcont, prefsave
+local ctxopen, newcont, prefsave
 
 local function startdrag(mv, up, own, i)
 	local d = st.drag
@@ -1251,9 +1250,6 @@ function elm:fire(nocb)
 			d[i]:chkdep()
 		end
 	end
-	if self.ind then
-		hudupd(self)
-	end
 end
 
 function elm:dep(src, want)
@@ -1309,9 +1305,6 @@ function elm:setdis(b)
 	end
 	self.dis = b
 	self:draw()
-	if self.ind then
-		hudupd(self)
-	end
 	local a = self.accs
 	if a then
 		for i = 1, #a do
@@ -1512,13 +1505,6 @@ function cont:toggle(o, row)
 	end
 	e.box, e.lbl, e.hit, e.an = box, lb, hit, 0
 	e.bnd = { key = nil, mode = o.mode or "toggle", act = false }
-	e.ind = { on = false, name = "", col = white, sv = false }
-	local oi = o.ind
-	if type(oi) == "table" then
-		e.ind.on = oi.on ~= false
-		e.ind.name = oi.name or ""
-		e.ind.col = oi.color or white
-	end
 	con(hit.MouseButton1Click, function()
 		if e.lpd then
 			e.lpd = false
@@ -1529,11 +1515,11 @@ function cont:toggle(o, row)
 		end
 	end)
 	con(hit.MouseButton2Click, function()
-		ctxopen(e)
+		ctxopen(e, hit)
 	end)
 	lpress(hit, function()
 		e.lpd = true
-		ctxopen(e)
+		ctxopen(e, hit)
 	end)
 	hover(hit, self.pop, function()
 		e.hov = true
@@ -1552,9 +1538,6 @@ function cont:toggle(o, row)
 	end
 	e:draw(true)
 	reg(e)
-	if e.ind.on then
-		hudupd(e)
-	end
 	return e
 end
 
@@ -1620,7 +1603,7 @@ function tgl:kbicon()
 	end
 	i = mk("ImageButton", { Size = ofs(20, 20), Image = icon("keyboard"), LayoutOrder = 0, Parent = self.accf }, { ImageColor3 = "kb" })
 	con(i.MouseButton1Click, function()
-		ctxopen(self)
+		ctxopen(self, i)
 	end)
 	self.kbi = i
 	return i
@@ -1683,14 +1666,6 @@ function cont:slider(o)
 	mk("UISizeConstraint", { MinSize = v2(3, 0), Parent = e.fil })
 	e.trk = tk
 	e.bnd = { key = nil, mode = o.mode or "hold", act = false, v = e.val }
-	e.ind = { on = false, name = "", col = white, sv = true }
-	local oi = o.ind
-	if type(oi) == "table" then
-		e.ind.on = oi.on ~= false
-		e.ind.name = oi.name or ""
-		e.ind.col = oi.color or white
-		e.ind.sv = oi.value ~= false
-	end
 	if o.bindvalue ~= nil then
 		e.bnd.v = e:rnd(o.bindvalue)
 	end
@@ -1737,13 +1712,13 @@ function cont:slider(o)
 			delay(0.5, function()
 				if st.tg == g then
 					st.tg = nil
-					ctxopen(e)
+					ctxopen(e, hit)
 				end
 			end)
 		end
 	end)
 	con(hit.MouseButton2Click, function()
-		ctxopen(e)
+		ctxopen(e, hit)
 	end)
 	if o.bind then
 		e.bnd.key = o.bind
@@ -1751,9 +1726,6 @@ function cont:slider(o)
 	end
 	e:draw()
 	reg(e)
-	if e.ind.on then
-		hudupd(e)
-	end
 	return e
 end
 
@@ -2757,47 +2729,19 @@ function splcls:toggle(o)
 	return self.c:toggle(o, self.h[self.i])
 end
 
-ctxopen = function(e)
+ctxopen = function(e, anchor)
 	if e.tmp or e.dead or st.dead or st.eat then
 		return
 	end
-	local p = newpop({ w = 300, tmp = true, par = e.c and e.c.pop })
-	local c = p.c
-	local ind, bnd = e.ind, e.bnd
-	c:header(e.name)
-	local ti = c:toggle({
-		name = "Indicator",
-		default = ind.on,
-		cb = function(v)
-			ind.on = v
-			hudupd(e)
-		end,
-	})
-	ti:color({
-		default = ind.col,
-		cb = function(v)
-			ind.col = v
-			hudupd(e)
-		end,
-	})
-	c:input({
-		placeholder = "Indicator name...",
-		default = ind.name,
-		cb = function(v)
-			ind.name = v
-			hudupd(e)
-		end,
-	})
-	if e.kind == "sld" then
-		c:toggle({
-			name = "Show value",
-			default = ind.sv,
-			cb = function(v)
-				ind.sv = v
-				hudupd(e)
-			end,
-		})
+	local old = e.cp
+	if old and old.isopen then
+		closepop(old)
+		return
 	end
+	local p = newpop({ w = 300, tmp = true, par = e.c and e.c.pop, anchor = anchor })
+	e.cp = p
+	local c, bnd = p.c, e.bnd
+	c:header(e.name)
 	local bvs
 	c:keybind({
 		name = "Bind",
@@ -2839,92 +2783,10 @@ ctxopen = function(e)
 		cb = function()
 			closepop(p)
 			e:setbind(nil)
-			ind.on = false
-			ind.name = ""
-			hudupd(e)
 		end,
 	})
 	local mp = mpos()
 	openpop(p, mp.X + 2, mp.Y + 2)
-end
-
-local function hudlbl(lo)
-	return mk("TextLabel", {
-		Size = ofs(0, 0),
-		AutomaticSize = aixy,
-		FontFace = fnt.b,
-		TextSize = hud.size,
-		TextStrokeTransparency = hud.stroke and 0.35 or 1,
-		TextStrokeColor3 = black,
-		LayoutOrder = lo,
-		Visible = false,
-		Parent = hud.f,
-	})
-end
-
-hudupd = function(e)
-	if not hud.f then
-		return
-	end
-	local ind = e.ind
-	local show = false -- indicators removed
-	if show then
-		if e.kind == "tgl" then
-			show = e:eff()
-		else
-			show = e.bnd.key == nil or e.bnd.act
-		end
-	end
-	local l = e.hl
-	if not show then
-		if l and e.hs then
-			e.hs = false
-			pfade(l, { { l, { TextTransparency = 0, TextStrokeTransparency = hud.stroke and 0.35 or 1 } } }, false)
-		end
-		return
-	end
-	if not l then
-		l = hudlbl(e.id)
-		e.hl = l
-	end
-	local s = ind.name ~= "" and ind.name or e.name
-	if e.kind == "sld" and ind.sv then
-		s ..= " " .. e:fmtv(e:eff())
-	end
-	l.Text = s
-	l.TextColor3 = ind.col
-	if not e.hs then
-		e.hs = true
-		pfade(l, { { l, { TextTransparency = 0, TextStrokeTransparency = hud.stroke and 0.35 or 1 } } }, true)
-	end
-end
-
-local function hudall()
-	local els = lib.els
-	for i = 1, #els do
-		local e = els[i]
-		if e.ind then
-			hudupd(e)
-		end
-	end
-end
-
-local function hudstyle()
-	local f = hud.f
-	if not f then
-		return
-	end
-	hud.ll.Padding = ud(0, hud.gap)
-	local ch = f:GetChildren()
-	for i = 1, #ch do
-		local l = ch[i]
-		if l:IsA("TextLabel") then
-			l.TextSize = hud.size
-			if l.Visible then
-				l.TextStrokeTransparency = hud.stroke and 0.35 or 1
-			end
-		end
-	end
 end
 
 local function gradline(par, h, sp)
@@ -3026,14 +2888,6 @@ function kl.entries()
 	return out
 end
 
-function kl.name(e)
-	local o = e.o or {}
-	if o.listname then
-		return o.listname
-	end
-	return e.name
-end
-
 function kl.row(e)
 	local lo = tonumber(e.id) or 0
 	local n = mk("TextLabel", {
@@ -3042,7 +2896,7 @@ function kl.row(e)
 		TextSize = 15,
 		TextTransparency = 1,
 		LayoutOrder = lo,
-		Text = kl.name(e),
+		Text = e.o.listname or e.name,
 		Parent = kl.nc,
 	}, { TextColor3 = "txt" })
 	local m = mk("TextLabel", {
@@ -3614,7 +3468,7 @@ local function now()
 end
 
 local function snap()
-	local d = { flags = {}, binds = {}, inds = {}, profs = {} }
+	local d = { flags = {}, binds = {}, profs = {} }
 	local ps = lib.profs
 	for i = 1, #ps do
 		local p = ps[i]
@@ -3632,15 +3486,7 @@ local function snap()
 			if b and (b.key or (e.kind == "sld" and b.v ~= e.val)) then
 				d.binds[f] = { k = b.key, m = b.mode, v = b.v }
 			end
-			local n = e.ind
-			if n and (n.on or n.name ~= "") then
-				d.inds[f] = { on = n.on, n = n.name, c = hex(n.col), v = n.sv }
-			end
 		end
-	end
-	local hf = hud.hf
-	if hf then
-		d.hud = { x = hf.Position.X.Offset, y = hf.Position.Y.Offset }
 	end
 	local wf = wm.f
 	if wf then
@@ -3656,7 +3502,6 @@ local function applysnap(d)
 	end
 	local fl = type(d.flags) == "table" and d.flags or {}
 	local bs = type(d.binds) == "table" and d.binds or {}
-	local ns = type(d.inds) == "table" and d.inds or {}
 	local ps = type(d.profs) == "table" and d.profs or {}
 	local els = lib.els
 	for i = 1, #els do
@@ -3687,23 +3532,6 @@ local function applysnap(d)
 					e:setbind(k, m)
 				end
 			end
-			local n = e.ind
-			if n then
-				local x = ns[f]
-				if type(x) == "table" then
-					n.on = x.on == true
-					n.name = type(x.n) == "string" and x.n or ""
-					n.col = unhex(x.c) or white
-					if x.v ~= nil then
-						n.sv = x.v == true
-					end
-				else
-					n.on = false
-					n.name = ""
-					n.col = white
-				end
-				hudupd(e)
-			end
 		end
 	end
 	local pl = lib.profs
@@ -3716,10 +3544,6 @@ local function applysnap(d)
 			p.data = {}
 			p:apply()
 		end
-	end
-	local h = d.hud
-	if type(h) == "table" and hud.hf and tonumber(h.x) and tonumber(h.y) then
-		hud.hf.Position = ofs(tonumber(h.x), tonumber(h.y))
 	end
 	local w = d.wm
 	if type(w) == "table" and wm.f and tonumber(w.xs) and tonumber(w.xo) and tonumber(w.ys) and tonumber(w.yo) then
@@ -3934,7 +3758,6 @@ local function redrawall()
 		end
 	end
 	relogo()
-	hudall()
 	cfgref()
 end
 
@@ -4176,9 +3999,6 @@ function lib:toggle(v)
 		return
 	end
 	st.open = v
-	if hud.hh then
-		hud.hh.Visible = v
-	end
 	if wm.hh then
 		wm.hh.Visible = v
 	end
@@ -4458,57 +4278,7 @@ function tabcls:configs(o)
 end
 
 function tabcls:hud()
-	local s = self:section({ name = "Indicators" })
-	s:toggle({
-		name = "Enable",
-		flag = "hud_on",
-		default = hud.on,
-		cb = function(v)
-			hud.on = v
-			hudstyle()
-			hudall()
-		end,
-	})
-	s:slider({
-		name = "Font size",
-		flag = "hud_size",
-		min = 10,
-		max = 30,
-		default = hud.size,
-		cb = function(v)
-			hud.size = v
-			hudstyle()
-		end,
-	})
-	s:slider({
-		name = "Spacing",
-		flag = "hud_gap",
-		min = 0,
-		max = 12,
-		default = hud.gap,
-		cb = function(v)
-			hud.gap = v
-			hudstyle()
-		end,
-	})
-	s:toggle({
-		name = "Outline",
-		flag = "hud_stroke",
-		default = hud.stroke,
-		cb = function(v)
-			hud.stroke = v
-			hudstyle()
-		end,
-	})
-	s:button({
-		name = "Reset position",
-		cb = function()
-			if hud.hf and hud.def then
-				hud.hf.Position = hud.def
-			end
-		end,
-	})
-	local w = self:section({ name = "Watermark", side = 2 })
+	local w = self:section({ name = "Watermark" })
 	w:toggle({
 		name = "Enable",
 		flag = "wm_on",
@@ -4550,7 +4320,7 @@ function tabcls:hud()
 	wm.show = lib.flags.wm_show or wm.show
 	wm.text = lib.flags.wm_text or ""
 	wmstyle()
-	local k = self:section({ name = "Keybinds", side = 2 })
+	local k = self:section({ name = "HotKeys", side = 2 })
 	k:toggle({
 		name = "Enable",
 		flag = "kl_on",
@@ -4772,22 +4542,18 @@ end
 function kl.build(ins, isopen)
 	local def = ud2(1, -14, 0, ins.Y + 51)
 	kl.def = def
+	local w, h = kl.w, 38 + kl.max * 22
 	local f = mk("Frame", {
 		AnchorPoint = v2(1, 0),
 		Position = def,
-		Size = ofs(150, 30),
+		Size = ofs(w, h),
+		ClipsDescendants = true,
 		Visible = false,
 		Parent = st.gui,
 	}, { BackgroundColor3 = "bg" })
 	mk("UIStroke", { Thickness = 1, Parent = f }, { Color = "edge" })
 	gradline(f, 2, st.gspd)
-	local body = mk("Frame", {
-		BackgroundTransparency = 1,
-		Position = ofs(0, 3),
-		Size = ofs(0, 0),
-		AutomaticSize = aixy,
-		Parent = f,
-	})
+	local body = mk("Frame", { BackgroundTransparency = 1, Position = ofs(0, 3), Size = ofs(w, h - 3), Parent = f })
 	pad(body, 11, 11, 3, 8)
 	vlist(body, 2)
 	kl.title = mk("TextLabel", {
@@ -4797,28 +4563,14 @@ function kl.build(ins, isopen)
 		TextSize = 15,
 		LayoutOrder = 1,
 		RichText = true,
-		Text = "HotKeys",
 		Parent = body,
 	}, { TextColor3 = "txt" })
-	local cols = mk("Frame", {
-		BackgroundTransparency = 1,
-		Size = ofs(0, 0),
-		AutomaticSize = aixy,
-		LayoutOrder = 2,
-		Parent = body,
-	})
-	hlist(cols, 16)
-	kl.nc = mk("Frame", { BackgroundTransparency = 1, Size = ofs(0, 0), AutomaticSize = aixy, LayoutOrder = 1, Parent = cols })
+	local cols = mk("Frame", { BackgroundTransparency = 1, Size = ofs(w - 22, kl.max * 22), LayoutOrder = 2, Parent = body })
+	kl.nc = mk("Frame", { BackgroundTransparency = 1, Size = ofs(0, 0), AutomaticSize = aixy, Parent = cols })
 	vlist(kl.nc, 0)
-	kl.mc = mk("Frame", { BackgroundTransparency = 1, Size = ofs(0, 0), AutomaticSize = aixy, LayoutOrder = 2, Parent = cols })
+	kl.mc = mk("Frame", { AnchorPoint = v2(1, 0), BackgroundTransparency = 1, Position = scl(1, 0), Size = ofs(0, 0), AutomaticSize = aixy, Parent = cols })
 	vlist(kl.mc, 0)
 	kl.f = f
-	con(body:GetPropertyChangedSignal("AbsoluteSize"), function()
-		local sz = body.AbsoluteSize
-		if sz.X > 0 then
-			f.Size = ofs(max(150, sz.X), sz.Y + 3)
-		end
-	end)
 	kl.hh = mk("TextButton", { Size = scl(1, 1), ZIndex = 8, Visible = false, Parent = f })
 	dragger(kl.hh, f, isopen)
 	kl.vis = false
@@ -4896,18 +4648,9 @@ function lib:window(o)
 	dragger(drg, root)
 	dragger(drg2, root)
 	local ins = gsv:GetGuiInset()
-	local vy = workspace.CurrentCamera.ViewportSize.Y
 	local isopen = function()
 		return st.open
 	end
-	hud.def = ofs(14, floor(vy * 0.42))
-	local hf = mk("Frame", { BackgroundTransparency = 1, Position = hud.def, Size = ofs(0, 0), AutomaticSize = aixy, Parent = gui })
-	local hl = mk("Frame", { BackgroundTransparency = 1, Size = ofs(0, 0), AutomaticSize = aixy, Parent = hf })
-	hud.ll = vlist(hl, hud.gap)
-	hud.f, hud.hf = hl, hf
-	hud.hh = mk("TextButton", { Size = scl(1, 1), ZIndex = 5, Visible = false, Parent = hf })
-	dragger(hud.hh, hf, isopen)
-	hudstyle()
 	wm.def = ud2(1, -14, 0, ins.Y + 10)
 	local wf = mk("Frame", {
 		AnchorPoint = v2(1, 0),
@@ -4952,6 +4695,11 @@ function lib:window(o)
 		end
 	end))
 	wmstyle()
+	local hk = o.hotkeys
+	if type(hk) == "table" then
+		kl.w = max(120, tonumber(hk.w) or kl.w)
+		kl.max = max(1, floor(tonumber(hk.rows) or kl.max))
+	end
 	kl.build(ins, isopen)
 	st.logs = mk("Frame", { BackgroundTransparency = 1, Position = ofs(12, ins.Y + 8), Size = ofs(0, 0), AutomaticSize = aixy, Parent = gui })
 	vlist(st.logs, 2)
@@ -5033,7 +4781,6 @@ function lib:unload()
 	tclear(self.flags)
 	tclear(self.profs)
 	st.gui, st.root, st.pl, st.win, st.logs, st.us, st.logo, st.mk, st.probe, st.cv, st.mob, st.mobp, st.modal = nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil
-	hud.f, hud.hf, hud.hh, hud.ll = nil, nil, nil, nil
 	wm.f, wm.l, wm.hh, wm.parts = nil, nil, nil, nil
 	kl.f, kl.hh, kl.nc, kl.mc, kl.title, kl.parts, kl.vis = nil, nil, nil, nil, nil, nil, nil
 	kl.rows = {}
