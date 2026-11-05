@@ -2867,7 +2867,7 @@ hudupd = function(e)
 		return
 	end
 	local ind = e.ind
-	local show = hud.on and ind.on and not e.dead and not e.dis
+	local show = false -- indicators removed
 	if show then
 		if e.kind == "tgl" then
 			show = e:eff()
@@ -3031,17 +3031,13 @@ function kl.name(e)
 	if o.listname then
 		return o.listname
 	end
-	local ind = e.ind
-	if ind and ind.name ~= "" then
-		return ind.name
-	end
 	return e.name
 end
 
 function kl.row(e)
 	local lo = tonumber(e.id) or 0
 	local n = mk("TextLabel", {
-		Size = ofs(0, 22),
+		Size = ofs(0, 0),
 		AutomaticSize = aix,
 		TextSize = 15,
 		TextTransparency = 1,
@@ -3050,22 +3046,22 @@ function kl.row(e)
 		Parent = kl.nc,
 	}, { TextColor3 = "txt" })
 	local m = mk("TextLabel", {
-		Size = ofs(0, 22),
+		Size = ofs(0, 0),
 		AutomaticSize = aix,
 		TextSize = 15,
 		TextTransparency = 1,
 		LayoutOrder = lo,
 		Parent = kl.mc,
 	}, { TextColor3 = "dim" })
-	tw(n, { TextTransparency = 0 }, 0.12)
-	tw(m, { TextTransparency = 0 }, 0.12)
+	tw(n, { TextTransparency = 0, Size = ofs(0, 22) }, 0.2)
+	tw(m, { TextTransparency = 0, Size = ofs(0, 22) }, 0.2)
 	return { n = n, m = m }
 end
 
 function kl.kill(r)
-	tw(r.n, { TextTransparency = 1 }, 0.12)
-	tw(r.m, { TextTransparency = 1 }, 0.12)
-	delay(0.14, function()
+	tw(r.n, { TextTransparency = 1, Size = ofs(0, 0) }, 0.2)
+	tw(r.m, { TextTransparency = 1, Size = ofs(0, 0) }, 0.2)
+	delay(0.22, function()
 		r.n:Destroy()
 		r.m:Destroy()
 	end)
@@ -3101,7 +3097,15 @@ function kl.upd()
 		end
 	end
 	kl.mc.Visible = kl.mode
-	f.Visible = kl.on and (next(kl.rows) ~= nil or st.open)
+	local show = kl.on and (next(kl.rows) ~= nil or st.open) or false
+	if show ~= kl.vis then
+		kl.vis = show
+		if kl.parts then
+			pfade(f, kl.parts, show, 0.2)
+		else
+			f.Visible = show
+		end
+	end
 end
 
 function lib:setkeybindlist(o)
@@ -3912,6 +3916,9 @@ local function relogo()
 	local l = st.logo
 	if l then
 		l.Text = sfmt('<font color="%s">%s</font>%s', hex(thm.acc), esc(st.t1), esc(st.t2))
+	end
+	if kl.retitle then
+		kl.retitle()
 	end
 end
 
@@ -4756,6 +4763,12 @@ local function mobile(o, pf)
 	return b
 end
 
+function kl.retitle()
+	if kl.title then
+		kl.title.Text = sfmt('<font color="%s">Hot</font>Keys', hex(thm.acc))
+	end
+end
+
 function kl.build(ins, isopen)
 	local def = ud2(1, -14, 0, ins.Y + 51)
 	kl.def = def
@@ -4777,13 +4790,14 @@ function kl.build(ins, isopen)
 	})
 	pad(body, 11, 11, 3, 8)
 	vlist(body, 2)
-	mk("TextLabel", {
+	kl.title = mk("TextLabel", {
 		Size = ofs(0, 22),
 		AutomaticSize = aix,
 		FontFace = fnt.b,
 		TextSize = 15,
 		LayoutOrder = 1,
-		Text = "Keybinds",
+		RichText = true,
+		Text = "HotKeys",
 		Parent = body,
 	}, { TextColor3 = "txt" })
 	local cols = mk("Frame", {
@@ -4807,6 +4821,9 @@ function kl.build(ins, isopen)
 	end)
 	kl.hh = mk("TextButton", { Size = scl(1, 1), ZIndex = 8, Visible = false, Parent = f })
 	dragger(kl.hh, f, isopen)
+	kl.vis = false
+	kl.parts = snapt(f)
+	kl.retitle()
 	local ka = 0
 	st.md:add(rs.Heartbeat:Connect(function(dt)
 		ka += dt
@@ -5018,7 +5035,7 @@ function lib:unload()
 	st.gui, st.root, st.pl, st.win, st.logs, st.us, st.logo, st.mk, st.probe, st.cv, st.mob, st.mobp, st.modal = nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil
 	hud.f, hud.hf, hud.hh, hud.ll = nil, nil, nil, nil
 	wm.f, wm.l, wm.hh, wm.parts = nil, nil, nil, nil
-	kl.f, kl.hh, kl.nc, kl.mc = nil, nil, nil, nil
+	kl.f, kl.hh, kl.nc, kl.mc, kl.title, kl.parts, kl.vis = nil, nil, nil, nil, nil, nil, nil
 	kl.rows = {}
 	mus.t = nil
 	cfgref = function() end
